@@ -1,84 +1,54 @@
 <!DOCTYPE html>
-<html lang="pt-pt">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de Pressão de Laplace</title>
+    <title>Pressão de Laplace com a Mão</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
-        body { 
-            font-family: sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            min-height: 100vh; 
-            margin: 0; 
-            background-color: #f4f7f6; 
-        }
-        .container { 
-            background: white; 
-            padding: 40px; 
-            border-radius: 20px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
-            text-align: center; 
-            max-width: 500px; 
-            width: 90%;
-        }
-        h1 { color: #2c3e50; }
-        #bolha { 
-            border: 4px solid #3498db; 
-            border-radius: 50%; 
-            background: rgba(52, 152, 219, 0.2); 
-            margin: 30px auto; 
-            transition: width 0.1s, height 0.1s; 
-        }
-        input[type=range] { width: 100%; margin: 20px 0; cursor: pointer; }
-        .info { font-size: 1.2em; color: #34495e; margin: 10px 0; }
-        .valor { color: #e67e22; font-weight: bold; font-size: 1.5em; }
+        body { text-align: center; font-family: sans-serif; background: #222; color: white; }
+        #container { position: relative; width: 640px; height: 480px; margin: auto; }
+        video { position: absolute; left: 0; top: 0; transform: scaleX(-1); }
+        canvas { position: absolute; left: 0; top: 0; transform: scaleX(-1); }
+        #info { margin-top: 20px; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h1>Pressão de Laplace</h1>
-    <p>Arraste para "fechar a mão" e reduzir o raio da bolha:</p>
-    
-    <div id="bolha"></div>
-    
-    <input type="range" id="sliderRaio" min="10" max="150" value="100">
-    
-    <div class="info">Raio: <span id="textoRaio">100</span> px</div>
-    <div class="info">Pressão Excedente: <span class="valor" id="textoPressao">0.00</span> Pa</div>
-</div>
+    <h1>Aperte a Bolha</h1>
+    <div id="container">
+        <video id="webcam" width="640" height="480" autoplay></video>
+        <canvas id="output" width="640" height="480"></canvas>
+    </div>
+    <div id="info">Distância entre dedos: <span id="dist">0</span> | Pressão: <span id="pressao">0</span></div>
 
 <script>
-    const slider = document.getElementById('sliderRaio');
-    const bolha = document.getElementById('bolha');
-    const textoRaio = document.getElementById('textoRaio');
-    const textoPressao = document.getElementById('textoPressao');
-    const gamma = 0.072; // Tensão superficial da água
-
-    function atualizarSimulacao() {
-        const raio = parseInt(slider.value);
-        
-        // Atualiza tamanho visual
-        bolha.style.width = (raio * 2) + 'px';
-        bolha.style.height = (raio * 2) + 'px';
-        
-        // Atualiza textos
-        textoRaio.innerText = raio;
-        
-        // Cálculo: ΔP = 2 * γ / R 
-        // (Convertemos px para metros simulados para o cálculo fazer sentido físico)
-        const pressao = (2 * gamma) / (raio / 1000); 
-        textoPressao.innerText = pressao.toFixed(2);
-    }
-
-    slider.oninput = atualizarSimulacao;
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('output');
+    const ctx = canvas.getContext('2d');
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     
-    // Iniciar
-    atualizarSimulacao();
-</script>
+    hands.onResults((results) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (results.multiHandLandmarks) {
+            for (const landmarks of results.multiHandLandmarks) {
+                // Pontos 4 (polegar) e 8 (indicador)
+                const d = Math.hypot(landmarks[4].x - landmarks[8].x, landmarks[4].y - landmarks[8].y);
+                const raio = Math.max(10, d * 500);
+                const pressao = 1000 / raio;
+                
+                // Mapear cor: 0 (azul) a 100 (vermelho)
+                const red = Math.min(255, pressao * 5);
+                ctx.fillStyle = `rgb(${red}, 100, ${255 - red})`;
+                ctx.beginPath();
+                ctx.arc(320, 240, raio, 0, 2 * Math.PI);
+                ctx.fill();
+                document.getElementById('dist').innerText = d.toFixed(2);
+                document.getElementById('pressao').innerText = pressao.toFixed(2);
+            }
+        }
+    });
 
+    const camera = new Camera(video, { onFrame: async () => { await hands.send({image: video}); } });
+    camera.start();
+</script>
 </body>
 </html>
