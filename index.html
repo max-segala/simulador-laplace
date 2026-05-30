@@ -1,54 +1,59 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Pressão de Laplace com a Mão</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <meta charset="UTF-8">
+    <title>Laboratório de Pressão Excedente</title>
     <style>
-        body { text-align: center; font-family: sans-serif; background: #222; color: white; }
-        #container { position: relative; width: 640px; height: 480px; margin: auto; }
-        video { position: absolute; left: 0; top: 0; transform: scaleX(-1); }
-        canvas { position: absolute; left: 0; top: 0; transform: scaleX(-1); }
-        #info { margin-top: 20px; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; margin: 0; }
+        .topo { width: 100%; background: #333; padding: 20px; text-align: center; box-shadow: 0 2px 10px black; }
+        #barra-pressao { font-size: 2em; color: #3498db; font-weight: bold; }
+        #bolha { 
+            border-radius: 50%; 
+            margin: 50px auto; 
+            transition: background 0.3s, width 0.1s, height 0.1s;
+            border: 2px solid white;
+        }
+        input[type=range] { width: 80%; max-width: 400px; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>Aperte a Bolha</h1>
-    <div id="container">
-        <video id="webcam" width="640" height="480" autoplay></video>
-        <canvas id="output" width="640" height="480"></canvas>
-    </div>
-    <div id="info">Distância entre dedos: <span id="dist">0</span> | Pressão: <span id="pressao">0</span></div>
+
+<div class="topo">
+    <h1>Laboratório de Laplace</h1>
+    <p>Feche a mão (mova a barra) = Aumenta a Pressão</p>
+    <div id="barra-pressao">ΔP: 0.00 Pa</div>
+</div>
+
+<div id="bolha"></div>
+
+<input type="range" id="slider" min="20" max="200" value="200">
 
 <script>
-    const video = document.getElementById('webcam');
-    const canvas = document.getElementById('output');
-    const ctx = canvas.getContext('2d');
-    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    
-    hands.onResults((results) => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (results.multiHandLandmarks) {
-            for (const landmarks of results.multiHandLandmarks) {
-                // Pontos 4 (polegar) e 8 (indicador)
-                const d = Math.hypot(landmarks[4].x - landmarks[8].x, landmarks[4].y - landmarks[8].y);
-                const raio = Math.max(10, d * 500);
-                const pressao = 1000 / raio;
-                
-                // Mapear cor: 0 (azul) a 100 (vermelho)
-                const red = Math.min(255, pressao * 5);
-                ctx.fillStyle = `rgb(${red}, 100, ${255 - red})`;
-                ctx.beginPath();
-                ctx.arc(320, 240, raio, 0, 2 * Math.PI);
-                ctx.fill();
-                document.getElementById('dist').innerText = d.toFixed(2);
-                document.getElementById('pressao').innerText = pressao.toFixed(2);
-            }
-        }
-    });
+    const slider = document.getElementById('slider');
+    const bolha = document.getElementById('bolha');
+    const texto = document.getElementById('barra-pressao');
+    const gamma = 0.072;
 
-    const camera = new Camera(video, { onFrame: async () => { await hands.send({image: video}); } });
-    camera.start();
+    slider.oninput = function() {
+        // O valor do slider invertido para simular "fechar" (quanto menor o raio, maior a pressão)
+        const raio = 220 - this.value; 
+        const pressao = (2 * gamma) / (raio / 1000);
+        
+        // Atualiza tamanho
+        bolha.style.width = (raio * 2) + 'px';
+        bolha.style.height = (raio * 2) + 'px';
+        
+        // Atualiza cor: Azul (baixa) -> Vermelho (alta)
+        const intensidade = Math.min(255, pressao / 5);
+        bolha.style.backgroundColor = `rgb(${intensidade}, 100, ${255 - intensidade})`;
+        
+        texto.innerText = "ΔP: " + pressao.toFixed(2) + " Pa";
+        texto.style.color = intensidade > 127 ? "#e74c3c" : "#3498db";
+    }
+    
+    // Iniciar
+    slider.oninput();
 </script>
+
 </body>
 </html>
