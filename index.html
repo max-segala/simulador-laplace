@@ -2,58 +2,184 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Laboratório de Pressão Excedente</title>
+    <title>Laboratório de Laplace: Pressão Excedente</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #1a1a1a; color: white; margin: 0; }
-        .topo { width: 100%; background: #333; padding: 20px; text-align: center; box-shadow: 0 2px 10px black; }
-        #barra-pressao { font-size: 2em; color: #3498db; font-weight: bold; }
-        #bolha { 
-            border-radius: 50%; 
-            margin: 50px auto; 
-            transition: background 0.3s, width 0.1s, height 0.1s;
-            border: 2px solid white;
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background-color: #121212; 
+            color: #ffffff; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            height: 100vh; 
+            overflow: hidden; 
         }
-        input[type=range] { width: 80%; max-width: 400px; margin-top: 20px; }
+        #header { 
+            width: 100%; 
+            background-color: #1e1e1e; 
+            padding: 20px 0; 
+            text-align: center; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5); 
+            z-index: 10; 
+        }
+        h1 { margin: 0 0 10px 0; font-size: 28px; }
+        #status { font-size: 16px; color: #ffeb3b; margin-bottom: 15px; font-weight: bold; }
+        .painel { display: flex; justify-content: center; gap: 30px; font-size: 22px; }
+        .caixa { background: #333; padding: 15px 25px; border-radius: 10px; font-weight: bold; border: 1px solid #444; }
+        .caixa-raio { color: #4CAF50; }
+        .caixa-pressao { color: #FF5252; }
+        
+        #video-container { 
+            position: relative; 
+            width: 100%; 
+            max-width: 800px; 
+            margin-top: 20px; 
+            flex-grow: 1; 
+            display: flex; 
+            justify-content: center; 
+        }
+        video { display: none; } /* Oculto, a imagem vai para o canvas */
+        
+        /* A propriedade scaleX(-1) faz o efeito de "espelho" para ficar natural */
+        canvas { 
+            width: 100%; 
+            max-width: 720px;
+            height: auto; 
+            border-radius: 12px; 
+            box-shadow: 0 0 20px rgba(0,0,0,0.8); 
+            transform: scaleX(-1); 
+            background-color: #000;
+        }
     </style>
 </head>
 <body>
 
-<div class="topo">
-    <h1>Laboratório de Laplace</h1>
-    <p>Feche a mão (mova a barra) = Aumenta a Pressão</p>
-    <div id="barra-pressao">ΔP: 0.00 Pa</div>
-</div>
+    <div id="header">
+        <h1>Laboratório da Bolha (Lei de Laplace)</h1>
+        <div id="status">A iniciar a câmara e a inteligência artificial... Aguarde.</div>
+        <div class="painel">
+            <div class="caixa caixa-raio">Raio da Bolha: <span id="raio-val">--</span> m</div>
+            <div class="caixa caixa-pressao">Pressão (ΔP): <span id="pressao-val">--</span> Pa</div>
+        </div>
+        <p style="margin-top: 15px; color: #aaa;">Instruções: Mostre a mão para a câmara. Junte o polegar e o indicador para comprimir a bolha.</p>
+    </div>
 
-<div id="bolha"></div>
+    <div id="video-container">
+        <video class="input_video" autoplay playsinline></video>
+        <canvas class="output_canvas" width="640" height="480"></canvas>
+    </div>
 
-<input type="range" id="slider" min="20" max="200" value="200">
-
-<script>
-    const slider = document.getElementById('slider');
-    const bolha = document.getElementById('bolha');
-    const texto = document.getElementById('barra-pressao');
-    const gamma = 0.072;
-
-    slider.oninput = function() {
-        // O valor do slider invertido para simular "fechar" (quanto menor o raio, maior a pressão)
-        const raio = 220 - this.value; 
-        const pressao = (2 * gamma) / (raio / 1000);
+    <script>
+        const videoElement = document.querySelector('.input_video');
+        const canvasElement = document.querySelector('.output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
         
-        // Atualiza tamanho
-        bolha.style.width = (raio * 2) + 'px';
-        bolha.style.height = (raio * 2) + 'px';
-        
-        // Atualiza cor: Azul (baixa) -> Vermelho (alta)
-        const intensidade = Math.min(255, pressao / 5);
-        bolha.style.backgroundColor = `rgb(${intensidade}, 100, ${255 - intensidade})`;
-        
-        texto.innerText = "ΔP: " + pressao.toFixed(2) + " Pa";
-        texto.style.color = intensidade > 127 ? "#e74c3c" : "#3498db";
-    }
-    
-    // Iniciar
-    slider.oninput();
-</script>
+        const statusText = document.getElementById('status');
+        const raioText = document.getElementById('raio-val');
+        const pressaoText = document.getElementById('pressao-val');
 
+        const gamma = 0.072; // Tensão superficial da água (N/m)
+        const maxRadius = 0.100; // 10 cm
+        const minRadius = 0.005; // 0.5 cm
+
+        function onResults(results) {
+            // Limpa o frame anterior
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // Desenha o vídeo da webcam como fundo
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                statusText.innerText = "Mão Detetada! Junte ou afaste os dedos.";
+                statusText.style.color = "#4CAF50";
+
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Desenha a "esqueleto" da mão para feedback visual
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 2});
+                drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
+
+                // Ponto 4 = Ponta do Polegar | Ponto 8 = Ponta do Indicador | Ponto 9 = Centro da mão
+                const polegar = landmarks[4];
+                const indicador = landmarks[8];
+                const centroMao = landmarks[9]; 
+
+                // Calcula a distância entre o polegar e o indicador
+                const distanciaDedos = Math.hypot(polegar.x - indicador.x, polegar.y - indicador.y);
+                
+                // Mapeia a distância dos dedos para o Raio da bolha
+                let raioAtual = (distanciaDedos - 0.02) * (maxRadius / 0.25);
+                if (raioAtual < minRadius) raioAtual = minRadius;
+                if (raioAtual > maxRadius) raioAtual = maxRadius;
+
+                // FÓRMULA DE LAPLACE: Pressão Excedente = 2 * Gamma / Raio
+                const pressao = (2 * gamma) / raioAtual;
+
+                // Atualiza os números no ecrã
+                raioText.innerText = raioAtual.toFixed(3);
+                pressaoText.innerText = pressao.toFixed(1);
+
+                // PREPARAÇÃO PARA DESENHAR A BOLHA
+                const centroX = centroMao.x * canvasElement.width;
+                const centroY = centroMao.y * canvasElement.height;
+                const raioVisualCanvas = raioAtual * 1500; // Escala para o ecrã
+
+                // Muda a cor consoante a pressão: Azul (Baixa) para Vermelho (Alta)
+                // O valor vai de 1.44 Pa (mínimo) a ~28.8 Pa (máximo)
+                const percentagemPressao = Math.min(1, Math.max(0, (pressao - 1.4) / 27.4));
+                const vermelho = Math.floor(255 * percentagemPressao);
+                const azul = Math.floor(255 * (1 - percentagemPressao));
+
+                // Desenha a Bolha
+                canvasCtx.beginPath();
+                canvasCtx.arc(centroX, centroY, raioVisualCanvas, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = `rgba(${vermelho}, 50, ${azul}, 0.6)`;
+                canvasCtx.fill();
+                canvasCtx.lineWidth = 4;
+                canvasCtx.strokeStyle = `rgba(${vermelho}, 100, ${azul}, 1)`;
+                canvasCtx.stroke();
+                
+            } else {
+                statusText.innerText = "Câmara ativa. Mostre a sua mão na frente da câmara.";
+                statusText.style.color = "#FFC107";
+                raioText.innerText = "--";
+                pressaoText.innerText = "--";
+            }
+            canvasCtx.restore();
+        }
+
+        // Configuração do MediaPipe
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+        hands.onResults(onResults);
+
+        // Inicialização da Câmara
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        
+        camera.start().catch((err) => {
+            statusText.innerText = "Erro ao aceder à câmara. Verifique as permissões do navegador.";
+            statusText.style.color = "#FF5252";
+        });
+    </script>
 </body>
 </html>
